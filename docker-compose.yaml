@@ -1,0 +1,65 @@
+services:
+
+  nginx:
+    container_name: app_nginx
+    image: nginx:latest
+    ports:
+      - "8000:80"
+    volumes:
+      - ./Docker/conf.d/:/etc/nginx/conf.d/
+      - ./laravel/:/var/www/
+    depends_on:
+      - laravel
+
+  laravel:
+    container_name: app_laravel
+    build:
+      context: .
+      dockerfile: Docker/Dockerfile
+    volumes:
+      - ./laravel/:/var/www/
+    restart: always
+    depends_on:
+      - pgsql
+      - rabbitmq
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        echo "Проводим миграции!"
+        php artisan migrate
+        echo "Начинаем работу!"
+        php-fpm -F -R
+
+  worker:
+    container_name: app_worker
+    build:
+      context: .
+      dockerfile: Docker/WorkerDockerfile
+    volumes:
+      - ./laravel/:/var/www/
+    restart: always
+    depends_on:
+      - laravel
+    command: [ "--tries=10", "--timeout=1000" ]
+
+  pgsql:
+    container_name: app_pgsql
+    image: postgres:latest
+    ports:
+      - 5433:5432
+    volumes:
+      - ./pgdata:/var/lib/postgresql
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=123
+      - POSTGRES_DB=ExampleDB
+    restart: always
+
+  rabbitmq:
+    container_name: app_rabbitmq
+    image: rabbitmq:3-management
+    ports:
+      - "5673:5672"
+      - "15673:15672"
